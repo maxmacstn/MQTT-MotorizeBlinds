@@ -25,6 +25,8 @@ const char *mqtt_server = "192.168.1.15";     //MQTT Server IP, your home MQTT s
 const int mqtt_port = 1883;                   //MQTT Server PORT, default is 1883 but can be anything.
 const int maxPositionStep = 4096 * 4;         //Maximum step for blinds to get down
 const bool isInvert = true;
+const int btnUp = D2;
+const int btnDown = D1;
 
 // MQTT Constants
 const char *mqtt_device_value_from_set_topic = "homebridge/from/set";
@@ -102,6 +104,51 @@ void blink()
   digitalWrite(LED_BUILTIN, HIGH);
 }
 
+void stopMoving(){
+  targetPositionStep = currentPositionStep;
+
+  stepper.stop();
+  String value;
+  String message;
+  char data[100];
+  message = "{\"name\" : \"Blind 1\", \"service_name\" : \"blind_1\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(currentPositionPercent) + "}";
+  message.toCharArray(data, (message.length() + 1));
+  client.publish(mqtt_device_value_to_set_topic, data);
+}
+
+void btnUpPressed()
+{
+  while(digitalRead(btnUp) == LOW);
+  if (stepper.getStepsLeft() != 0){
+    stopMoving();
+    return;
+  }
+
+  setPosition(0);
+  String value;
+  String message;
+  char data[100];
+  message = "{\"name\" : \"Blind 1\", \"service_name\" : \"blind_1\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(0) + "}";
+  message.toCharArray(data, (message.length() + 1));
+  client.publish(mqtt_device_value_to_set_topic, data);
+}
+
+void btnDownPressed()
+{
+   while(digitalRead(btnDown) == LOW);
+  if (stepper.getStepsLeft() != 0){
+    stopMoving();
+    return;
+  }
+  setPosition(100);
+  String value;
+  String message;
+  char data[100];
+  message = "{\"name\" : \"Blind 1\", \"service_name\" : \"blind_1\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(100) + "}";
+  message.toCharArray(data, (message.length() + 1));
+  client.publish(mqtt_device_value_to_set_topic, data);
+}
+
 void callback(char *topic, byte *payload, unsigned int length)
 {
 
@@ -143,14 +190,15 @@ void updateServerValue()
   String value;
   String message;
   char data[100];
-  message = "{\"name\" : \"Blind 1\", \"service_name\" : \"blind_1\", \"characteristic\" : \"CurrentPosition\", \"value\" : "+String(currentPositionPercent) +"}";
+  message = "{\"name\" : \"Blind 1\", \"service_name\" : \"blind_1\", \"characteristic\" : \"CurrentPosition\", \"value\" : " + String(currentPositionPercent) + "}";
   message.toCharArray(data, (message.length() + 1));
   client.publish(mqtt_device_value_to_set_topic, data);
 }
 
 void setPosition(unsigned int positionPercent)
 {
-  if (isInvert){
+  if (isInvert)
+  {
     positionPercent = 100 - positionPercent;
   }
   Serial.println("set position");
@@ -188,6 +236,12 @@ void setup()
   setup_ota();
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
+
+  // Setup buttons
+  pinMode(btnUp, INPUT_PULLUP);
+  pinMode(btnDown, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(btnUp), btnUpPressed, FALLING);
+  attachInterrupt(digitalPinToInterrupt(btnDown), btnDownPressed, FALLING);
 }
 
 void loop()
@@ -210,9 +264,8 @@ void loop()
       currentPositionStep = abs(targetPositionStep - abs(stepper.getStepsLeft()));
   }
 
-
   currentPositionPercent = (int)round(((float)currentPositionStep / (float)maxPositionStep) * 100.0);
-  if(isInvert)
+  if (isInvert)
     currentPositionPercent = 100 - currentPositionPercent;
 
   if (millis() % 10000 == 0)
