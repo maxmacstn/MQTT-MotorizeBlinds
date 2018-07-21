@@ -148,10 +148,12 @@ void CheapStepper::run(){
 		if (stepsLeft > 0) { // clockwise
 			stepCW();
 			stepsLeft--;
-		} else if (stepsLeft < 0){ // counter-clockwise
+		} if (stepsLeft < 0){ // counter-clockwise
 			stepCCW();
 			stepsLeft++;
-		} 
+		}if (stepsLeft == 0){
+			seq(-1); 			//Release motor
+		}
 
 		lastStepTime = micros();
 	}
