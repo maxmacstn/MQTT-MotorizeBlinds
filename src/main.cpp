@@ -25,13 +25,20 @@ const char *autoconf_pwd = "12345678";        // AP password so noone else can c
 const char *mqtt_server = "192.168.1.15";     //MQTT Server IP, your home MQTT server eg Mosquitto on RPi, or some public MQTT
 const int mqtt_port = 1883;                   //MQTT Server PORT, default is 1883 but can be anything.
 const bool isInvert = true;
-const int btnUp = D1;
-const int btnDown = D2;
+const int btnUp = D6;
+const int btnDown = 13;
+const int stepper_1 = D1;
+const int stepper_2 = D2;
+const int stepper_3 = D3;
+const int stepper_4 = D4;
+
 
 // MQTT Constants
 const char *mqtt_device_value_from_set_topic = "homebridge/from/set";
 const char *mqtt_device_value_to_set_topic = "homebridge/to/set";
-const char *device_name = "Blind 1";
+String device_name = "Blind 1";
+String service_name = "blind_1";
+
 
 // Global Variable
 WiFiClient espClient;
@@ -154,7 +161,7 @@ void stopMoving()
   String value;
   String message;
   char data[100];
-  message = "{\"name\" : \"Blind 1\", \"service_name\" : \"blind_1\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(currentPositionPercent) + "}";
+  message = "{\"name\" : \""+ device_name +"\", \"service_name\" : \""+ service_name+"\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(currentPositionPercent) + "}";
   message.toCharArray(data, (message.length() + 1));
   client.publish(mqtt_device_value_to_set_topic, data);
   saveStatus();
@@ -174,7 +181,7 @@ void btnUpPressed()
   String value;
   String message;
   char data[100];
-  message = "{\"name\" : \"Blind 1\", \"service_name\" : \"blind_1\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(100) + "}";
+  message = "{\"name\" : \"" +device_name+ "\", \"service_name\" : \""+service_name+"\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(100) + "}";
   message.toCharArray(data, (message.length() + 1));
   client.publish(mqtt_device_value_to_set_topic, data);
 }
@@ -192,7 +199,7 @@ void btnDownPressed()
   String value;
   String message;
   char data[100];
-  message = "{\"name\" : \"Blind 1\", \"service_name\" : \"blind_1\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(0) + "}";
+  message = "{\"name\" : \"" +device_name+ "\", \"service_name\" : \""+service_name+"\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(0) + "}";
   message.toCharArray(data, (message.length() + 1));
   client.publish(mqtt_device_value_to_set_topic, data);
 }
@@ -216,7 +223,7 @@ void callback(char *topic, byte *payload, unsigned int length)
   const char *name = root["name"];
 
   Serial.println(name);
-  if (strcmp(name, device_name) != 0)
+  if (strcmp(name, device_name.c_str()) != 0)
   {
     return;
   }
@@ -238,7 +245,7 @@ void updateServerValue()
   String value;
   String message;
   char data[100];
-  message = "{\"name\" : \"Blind 1\", \"service_name\" : \"blind_1\", \"characteristic\" : \"CurrentPosition\", \"value\" : " + String(currentPositionPercent) + "}";
+  message = "{\"name\" : \"" +device_name+ "\", \"service_name\" : \""+service_name+"\", \"characteristic\" : \"CurrentPosition\", \"value\" : " + String(currentPositionPercent) + "}";
   message.toCharArray(data, (message.length() + 1));
   client.publish(mqtt_device_value_to_set_topic, data);
 }
@@ -271,7 +278,7 @@ void setPosition(unsigned int positionPercent)
 
   int stepsToGo = targetPositionStep - currentPositionStep;
   if (stepsToGo < 0)
-    moveClockwise = true;
+    moveClockwise = true;       
   else
     moveClockwise = false;
 
@@ -334,7 +341,7 @@ void callibrateMode()
 void setup()
 {
   Serial.begin(9600);
-  stepper = CheapStepper(D5, D6, D7, D8);
+  stepper = CheapStepper(stepper_1, stepper_2, stepper_3, stepper_4);
   stepper.begin();
   stepper.setRpm(18);
 
