@@ -10,9 +10,9 @@
 #include <EEPROM.h>
 
 /*
-homebridge/from/set
-{"name" : "Blind 1" ,  "service_name" : "blind_1" , "characteristic" : "TargetPosition" , "value" : 50}
-
+Add to mqtt API
+Topic : homebridge/from/set
+Payload: {"name" : "Blind 1" ,  "service_name" : "blind_1" , "characteristic" : "TargetPosition" , "value" : 50}
 
 */
 
@@ -21,12 +21,14 @@ CheapStepper stepper;
 
 // Constants
 const char *autoconf_ssid = "ESP8266 Blinds"; //AP name for WiFi setup AP which your ESP will open when not able to connect to other WiFi
-const char *autoconf_pwd = "12345678";        // AP password so noone else can connect to the ESP in case your router fails
+const char *autoconf_pwd = "12345678";        //AP password so noone else can connect to the ESP in case your router fails
 const char *mqtt_server = "192.168.1.15";     //MQTT Server IP, your home MQTT server eg Mosquitto on RPi, or some public MQTT
 const int mqtt_port = 1883;                   //MQTT Server PORT, default is 1883 but can be anything.
 const bool isInvert = true;
 const int btnUp = D6;
 const int btnDown = 13;
+const int upRPM = 18;
+const int downRPM = 25;
 const int stepper_1 = D1;
 const int stepper_2 = D2;
 const int stepper_3 = D3;
@@ -116,42 +118,7 @@ void blink()
   digitalWrite(LED_BUILTIN, HIGH);
 }
 
-// //This function will write a 4 byte (32bit) long to the eeprom at
-// //the specified address to address + 3.
-// void EEPROMWritelong(int address, long value)
-// {
-//   //Decomposition from a long to 4 bytes by using bitshift.
-//   //One = Most significant -> Four = Least significant byte
-//   byte four = (value & 0xFF);
-//   byte three = ((value >> 8) & 0xFF);
-//   byte two = ((value >> 16) & 0xFF);
-//   byte one = ((value >> 24) & 0xFF);
 
-//   //Write the 4 bytes into the eeprom memory.
-//   EEPROM.put(address, four);
-//   EEPROM.put(address + 1, three);
-//   EEPROM.put(address + 2, two);
-//   EEPROM.put(address + 3, one);
-//   EEPROM.commit();
-// }
-
-// long EEPROMReadlong(long address)
-// {
-//   //Read the 4 bytes from the eeprom memory.
-//   long four = 0;
-//   long three = 0;
-//   long two = 0;
-//   long one = 0;
-
-//   EEPROM.get(address ,four);
-//   EEPROM.get(address + 1, three);
-//   EEPROM.get(address + 2, two);
-//   EEPROM.get(address + 3, one);
-
-
-//   //Return the recomposed long by using bitshift.
-//   return ((four << 0) & 0xFF) + ((three << 8) & 0xFFFF) + ((two << 16) & 0xFFFFFF) + ((one << 24) & 0xFFFFFFFF);
-// }
 
 void stopMoving()
 {
@@ -282,6 +249,18 @@ void setPosition(unsigned int positionPercent)
   else
     moveClockwise = false;
 
+  // Move Blinds down, it can go faster than up.
+  if (isInvert && !moveClockwise){
+    stepper.setRpm(downRPM);
+    Serial.println("DN");
+  }else if (!isInvert && moveClockwise){
+    stepper.setRpm(downRPM);
+    Serial.println("DN");
+  }
+  else{
+    Serial.println("UP");
+    stepper.setRpm(upRPM);
+  }
   Serial.print("steps to go = ");
   Serial.println(stepsToGo);
   stepper.newMove(moveClockwise, stepsToGo);
@@ -340,23 +319,23 @@ void callibrateMode()
 
 void setup()
 {
-  Serial.begin(9600);
+  // Serial.begin(9600);
   stepper = CheapStepper(stepper_1, stepper_2, stepper_3, stepper_4);
   stepper.begin();
-  stepper.setRpm(18);
+  stepper.setRpm(upRPM);
 
   // Setup buttons
   pinMode(btnUp, INPUT_PULLUP);
   pinMode(btnDown, INPUT_PULLUP);
 
   EEPROM.begin(512);
+
   // //Calibration Mode
   if (digitalRead(btnDown) == LOW){
     callibrateMode();
 
   }
   
-  // currentPositionStep = EEPROMReadlong(0);
   int savedMaxPositionStep;
   EEPROM.get(300,savedMaxPositionStep);
   EEPROM.get(100,currentPositionStep);
@@ -373,7 +352,6 @@ void setup()
     EEPROM.commit();
     delay(300);
   }
-  // EEPROM.end();
 
 
 
@@ -435,9 +413,6 @@ void loop()
     else
       currentPositionStep = abs(targetPositionStep - abs(stepper.getStepsLeft()));
   }
-  // else if(abs(stepper.getStepsLeft()) <= 145){
-  //   stepper.stop();
-  // }
 
   currentPositionPercent = (int)round(((float)currentPositionStep / (float)maxPositionStep) * 100.0);
   if (isInvert)
