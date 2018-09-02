@@ -27,19 +27,21 @@ const int mqtt_port = 1883;                   //MQTT Server PORT, default is 188
 const bool isInvert = true;
 const int btnUp = D6;
 const int btnDown = 13;
-const int upRPM = 18;
+const int upRPM = 18;                  //Default
+// const int upRPM = 13;                     //Big blinds
 const int downRPM = 25;
 const int stepper_1 = D1;
 const int stepper_2 = D2;
 const int stepper_3 = D3;
 const int stepper_4 = D4;
+const int onboard_led = 1;
 
 
 // MQTT Constants
 const char *mqtt_device_value_from_set_topic = "homebridge/from/set";
 const char *mqtt_device_value_to_set_topic = "homebridge/to/set";
-String device_name = "Blind 1";
-String service_name = "blind_1";
+String device_name = "Blind 3";
+String service_name = "blind_3";
 
 
 // Global Variable
@@ -113,9 +115,9 @@ void blink()
 {
 
   //Blink on received MQTT message
-  digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(onboard_led, LOW);
   delay(20);
-  digitalWrite(LED_BUILTIN, HIGH);
+  digitalWrite(onboard_led, LOW);
 }
 
 
@@ -136,8 +138,9 @@ void stopMoving()
 
 void btnUpPressed()
 {
-  while (digitalRead(btnUp) == LOW)
-    ;
+  while (digitalRead(btnUp) == LOW){
+    delay(0);
+  }
   if (stepper.getStepsLeft() != 0)
   {
     stopMoving();
@@ -155,7 +158,9 @@ void btnUpPressed()
 
 void btnDownPressed()
 {
-  while (digitalRead(btnDown) == LOW);
+  while (digitalRead(btnDown) == LOW){
+    delay(0);
+  }
   if (stepper.getStepsLeft() != 0)
   {
     stopMoving();
@@ -306,7 +311,9 @@ void callibrateMode()
     stepper.run();
     delay(0);
   }
-  while(digitalRead(btnDown) == LOW);
+  while(digitalRead(btnDown) == LOW){
+    delay(0);
+  }
   distanceStep = 1000000 - abs(stepper.getStepsLeft());
   stepper.stop();
   Serial.print("Calibrated distance: ");
@@ -358,13 +365,18 @@ void setup()
   // Setup networking
   WiFiManager wifiManager;
   wifiManager.autoConnect(autoconf_ssid, autoconf_pwd);
-  setup_ota();
+
+  // setup_ota();
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
 
   //Attach interrupt for manual button controls
   attachInterrupt(digitalPinToInterrupt(btnUp), btnUpPressed, FALLING);
   attachInterrupt(digitalPinToInterrupt(btnDown), btnDownPressed, FALLING);
+
+  //Turn off led
+  pinMode(onboard_led, OUTPUT);
+  digitalWrite(onboard_led, HIGH);
   
 }
 
