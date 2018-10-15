@@ -19,8 +19,14 @@ Payload: {"name" : "Blind 1" ,  "service_name" : "blind_1" , "characteristic" : 
 const int stepsPerRev = 200;
 CheapStepper stepper;
 
+// MQTT Constants
+const char *mqtt_device_value_from_set_topic = "homebridge/from/set";
+const char *mqtt_device_value_to_set_topic = "homebridge/to/set";
+String device_name = "Blind 2";
+String service_name = "blind_2";
+
 // Constants
-const char *autoconf_ssid = "ESP8266 Blinds"; //AP name for WiFi setup AP which your ESP will open when not able to connect to other WiFi
+String autoconf_ssid = "ESP8266 " + device_name ; //AP name for WiFi setup AP which your ESP will open when not able to connect to other WiFi
 const char *autoconf_pwd = "12345678";        //AP password so noone else can connect to the ESP in case your router fails
 const char *mqtt_server = "192.168.1.15";     //MQTT Server IP, your home MQTT server eg Mosquitto on RPi, or some public MQTT
 const int mqtt_port = 1883;                   //MQTT Server PORT, default is 1883 but can be anything.
@@ -37,11 +43,7 @@ const int stepper_4 = D4;
 const int onboard_led = 1;
 
 
-// MQTT Constants
-const char *mqtt_device_value_from_set_topic = "homebridge/from/set";
-const char *mqtt_device_value_to_set_topic = "homebridge/to/set";
-String device_name = "Blind 3";
-String service_name = "blind_3";
+
 
 
 // Global Variable
@@ -206,7 +208,7 @@ void callback(char *topic, byte *payload, unsigned int length)
   if (strcmp(characteristic, "TargetPosition") == 0)
   {
     int value = root["value"];
-    Serial.print("Brightness = ");
+    Serial.print("Value = ");
     Serial.println(value, DEC);
     setPosition(value);
   }
@@ -281,6 +283,7 @@ void callibrateMode()
   {
     delay(0);
   }
+  delay(50);
 
   if (isInvert)
     stepper.newMove(false, 1000000);
@@ -364,7 +367,9 @@ void setup()
 
   // Setup networking
   WiFiManager wifiManager;
-  wifiManager.autoConnect(autoconf_ssid, autoconf_pwd);
+  char wifiNameBuffer[50];
+  autoconf_ssid.toCharArray(wifiNameBuffer,autoconf_ssid.length() +1);
+  wifiManager.autoConnect(wifiNameBuffer, autoconf_pwd);
 
   // setup_ota();
   client.setServer(mqtt_server, mqtt_port);
