@@ -22,18 +22,18 @@ CheapStepper stepper;
 // MQTT Constants
 const char *mqtt_device_value_from_set_topic = "homebridge/from/set";
 const char *mqtt_device_value_to_set_topic = "homebridge/to/set";
-String device_name = "Blind 2";
-String service_name = "blind_2";
+String device_name = "Blind 1";
+String service_name = "blind_1";
 
 // Constants
-String autoconf_ssid = "ESP8266 " + device_name ; //AP name for WiFi setup AP which your ESP will open when not able to connect to other WiFi
-const char *autoconf_pwd = "12345678";        //AP password so noone else can connect to the ESP in case your router fails
-const char *mqtt_server = "192.168.1.15";     //MQTT Server IP, your home MQTT server eg Mosquitto on RPi, or some public MQTT
-const int mqtt_port = 1883;                   //MQTT Server PORT, default is 1883 but can be anything.
+String autoconf_ssid = "ESP8266 " + device_name; //AP name for WiFi setup AP which your ESP will open when not able to connect to other WiFi
+const char *autoconf_pwd = "12345678";           //AP password so noone else can connect to the ESP in case your router fails
+const char *mqtt_server = "192.168.1.15";        //MQTT Server IP, your home MQTT server eg Mosquitto on RPi, or some public MQTT
+const int mqtt_port = 1883;                      //MQTT Server PORT, default is 1883 but can be anything.
 const bool isInvert = true;
 const int btnUp = D6;
 const int btnDown = 13;
-const int upRPM = 18;                  //Default
+const int upRPM = 18; //Default
 // const int upRPM = 13;                     //Big blinds
 const int downRPM = 25;
 const int stepper_1 = D1;
@@ -41,10 +41,6 @@ const int stepper_2 = D2;
 const int stepper_3 = D3;
 const int stepper_4 = D4;
 const int onboard_led = 1;
-
-
-
-
 
 // Global Variable
 WiFiClient espClient;
@@ -57,12 +53,14 @@ unsigned int targetPositionStep = 0;
 unsigned int currentPositionPercent = 0;
 unsigned int lastValue = 0;
 unsigned int lastSavedValue = 0;
-unsigned int maxPositionStep = 4096 * 4;         //Maximum step for blinds to get down
-
-
+unsigned int maxPositionStep = 4096 * 4; //Maximum step for blinds to get down
 //Declare prototype functions
 void setPosition(unsigned int);
 void saveStatus();
+void callibrateMode();
+void ICACHE_RAM_ATTR btnUpPressed ();
+void ICACHE_RAM_ATTR btnDownPressed ();
+
 
 void setup_ota()
 {
@@ -122,8 +120,6 @@ void blink()
   digitalWrite(onboard_led, LOW);
 }
 
-
-
 void stopMoving()
 {
   targetPositionStep = currentPositionStep;
@@ -132,7 +128,7 @@ void stopMoving()
   String value;
   String message;
   char data[100];
-  message = "{\"name\" : \""+ device_name +"\", \"service_name\" : \""+ service_name+"\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(currentPositionPercent) + "}";
+  message = "{\"name\" : \"" + device_name + "\", \"service_name\" : \"" + service_name + "\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(currentPositionPercent) + "}";
   message.toCharArray(data, (message.length() + 1));
   client.publish(mqtt_device_value_to_set_topic, data);
   saveStatus();
@@ -140,7 +136,8 @@ void stopMoving()
 
 void btnUpPressed()
 {
-  while (digitalRead(btnUp) == LOW){
+  while (digitalRead(btnUp) == LOW)
+  {
     delay(0);
   }
   if (stepper.getStepsLeft() != 0)
@@ -153,15 +150,17 @@ void btnUpPressed()
   String value;
   String message;
   char data[100];
-  message = "{\"name\" : \"" +device_name+ "\", \"service_name\" : \""+service_name+"\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(100) + "}";
+  message = "{\"name\" : \"" + device_name + "\", \"service_name\" : \"" + service_name + "\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(100) + "}";
   message.toCharArray(data, (message.length() + 1));
   client.publish(mqtt_device_value_to_set_topic, data);
 }
 
 void btnDownPressed()
 {
-  while (digitalRead(btnDown) == LOW){
+  while (digitalRead(btnDown) == LOW)
+  {
     delay(0);
+    
   }
   if (stepper.getStepsLeft() != 0)
   {
@@ -173,7 +172,7 @@ void btnDownPressed()
   String value;
   String message;
   char data[100];
-  message = "{\"name\" : \"" +device_name+ "\", \"service_name\" : \""+service_name+"\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(0) + "}";
+  message = "{\"name\" : \"" + device_name + "\", \"service_name\" : \"" + service_name + "\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(0) + "}";
   message.toCharArray(data, (message.length() + 1));
   client.publish(mqtt_device_value_to_set_topic, data);
 }
@@ -219,7 +218,7 @@ void updateServerValue()
   String value;
   String message;
   char data[100];
-  message = "{\"name\" : \"" +device_name+ "\", \"service_name\" : \""+service_name+"\", \"characteristic\" : \"CurrentPosition\", \"value\" : " + String(currentPositionPercent) + "}";
+  message = "{\"name\" : \"" + device_name + "\", \"service_name\" : \"" + service_name + "\", \"characteristic\" : \"CurrentPosition\", \"value\" : " + String(currentPositionPercent) + "}";
   message.toCharArray(data, (message.length() + 1));
   client.publish(mqtt_device_value_to_set_topic, data);
 }
@@ -234,13 +233,14 @@ void setPosition(unsigned int positionPercent)
 
   if (positionPercent != 0 || positionPercent != 100)
     targetPositionStep = (int)round((float)maxPositionStep * ((float)positionPercent / 100.0));
-  else{
-    if(positionPercent == 100)
+  else
+  {
+    if (positionPercent == 100)
       targetPositionStep = maxPositionStep;
     else
       targetPositionStep = 0;
   }
-  
+
   Serial.print("targetPositionStep = ");
   Serial.println(targetPositionStep);
   Serial.print("positionPercent = ");
@@ -252,19 +252,23 @@ void setPosition(unsigned int positionPercent)
 
   int stepsToGo = targetPositionStep - currentPositionStep;
   if (stepsToGo < 0)
-    moveClockwise = true;       
+    moveClockwise = true;
   else
     moveClockwise = false;
 
   // Move Blinds down, it can go faster than up.
-  if (isInvert && !moveClockwise){
-    stepper.setRpm(downRPM);
-    Serial.println("DN");
-  }else if (!isInvert && moveClockwise){
+  if (isInvert && !moveClockwise)
+  {
     stepper.setRpm(downRPM);
     Serial.println("DN");
   }
-  else{
+  else if (!isInvert && moveClockwise)
+  {
+    stepper.setRpm(downRPM);
+    Serial.println("DN");
+  }
+  else
+  {
     Serial.println("UP");
     stepper.setRpm(upRPM);
   }
@@ -314,21 +318,23 @@ void callibrateMode()
     stepper.run();
     delay(0);
   }
-  while(digitalRead(btnDown) == LOW){
+  while (digitalRead(btnDown) == LOW)
+  {
     delay(0);
   }
   distanceStep = 1000000 - abs(stepper.getStepsLeft());
   stepper.stop();
   Serial.print("Calibrated distance: ");
   Serial.println(distanceStep);
-  EEPROM.put(300,distanceStep);
-  EEPROM.put(100,0);  
+  EEPROM.put(300, distanceStep);
+  EEPROM.put(100, 0);
   EEPROM.commit();
   delay(300);
 }
 
 void setup()
 {
+  // WiFi.disconnect();
   // Serial.begin(9600);
   stepper = CheapStepper(stepper_1, stepper_2, stepper_3, stepper_4);
   stepper.begin();
@@ -340,36 +346,45 @@ void setup()
 
   EEPROM.begin(512);
 
-  // //Calibration Mode
-  if (digitalRead(btnDown) == LOW){
-    callibrateMode();
+  delay(5000);
 
+  // //Calibration Mode
+  if (digitalRead(btnDown) == LOW)
+  {
+    callibrateMode();
   }
-  
+
   int savedMaxPositionStep;
-  EEPROM.get(300,savedMaxPositionStep);
-  EEPROM.get(100,currentPositionStep);
+  EEPROM.get(300, savedMaxPositionStep);
+  EEPROM.get(100, currentPositionStep);
   delay(500);
 
   Serial.println("Loaded data");
   Serial.println(currentPositionStep);
   Serial.println(savedMaxPositionStep);
 
-  maxPositionStep = (savedMaxPositionStep != 0)? savedMaxPositionStep:maxPositionStep;
-  if(currentPositionStep > maxPositionStep){
+  maxPositionStep = (savedMaxPositionStep != 0) ? savedMaxPositionStep : maxPositionStep;
+  if (currentPositionStep > maxPositionStep)
+  {
     currentPositionStep = 0;
-    EEPROM.put(300,0);
+    EEPROM.put(300, 0);
     EEPROM.commit();
     delay(300);
   }
 
-
-
   // Setup networking
   WiFiManager wifiManager;
   char wifiNameBuffer[50];
-  autoconf_ssid.toCharArray(wifiNameBuffer,autoconf_ssid.length() +1);
-  wifiManager.autoConnect(wifiNameBuffer, autoconf_pwd);
+  autoconf_ssid.toCharArray(wifiNameBuffer, autoconf_ssid.length() + 1);
+
+  wifiManager.setConfigPortalTimeout(180); //3 Min for Config mode.
+  if (wifiManager.autoConnect(wifiNameBuffer, autoconf_pwd)){ //It will return false if it can't connect to wifi (in 3 min)
+    Serial.println("Connection success");
+  }
+  else
+  {
+    ESP.reset(); //Restart if it can't connect.
+  }
 
   // setup_ota();
   client.setServer(mqtt_server, mqtt_port);
@@ -382,12 +397,13 @@ void setup()
   //Turn off led
   pinMode(onboard_led, OUTPUT);
   digitalWrite(onboard_led, HIGH);
-  
 }
 
-void saveStatus(){
+void saveStatus()
+{
 
-    if (currentPositionPercent != lastValue){
+  if (currentPositionPercent != lastValue)
+  {
 
     Serial.println("- Update Data - ");
     Serial.print("steps left = ");
@@ -398,17 +414,17 @@ void saveStatus(){
     Serial.println(currentPositionPercent);
     updateServerValue();
     lastValue = currentPositionPercent;
+  }
 
-    }
-
-    if (stepper.getStepsLeft() == 0 && lastSavedValue != currentPositionStep){
-      Serial.println("saved status");
-      EEPROM.put(100,currentPositionStep);
-      EEPROM.commit();
-      // EEPROM.end();
-      delay(500);
-      lastSavedValue = currentPositionStep;
-    }
+  if (stepper.getStepsLeft() == 0 && lastSavedValue != currentPositionStep)
+  {
+    Serial.println("saved status");
+    EEPROM.put(100, currentPositionStep);
+    EEPROM.commit();
+    // EEPROM.end();
+    delay(500);
+    lastSavedValue = currentPositionStep;
+  }
 }
 
 void loop()
@@ -435,6 +451,5 @@ void loop()
   if (isInvert)
     currentPositionPercent = 100 - currentPositionPercent;
 
-
-    saveStatus();
-  }
+  saveStatus();
+}
