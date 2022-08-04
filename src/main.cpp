@@ -8,6 +8,7 @@
 #include <ArduinoOTA.h>
 #include <math.h>
 #include <EEPROM.h>
+#include <ArduinoHA.h>
 
 
 /*
@@ -41,7 +42,7 @@ const int stepper_1 = D1;
 const int stepper_2 = D2;
 const int stepper_3 = D3;
 const int stepper_4 = D4;
-const int onboard_led = 1;
+const int onboard_led = 2;
 
 // Global Variable
 WiFiClient espClient;
@@ -62,12 +63,17 @@ void callibrateMode();
 void ICACHE_RAM_ATTR btnUpPressed ();
 void ICACHE_RAM_ATTR btnDownPressed ();
 
+//HA 
+HADevice device(service_name.c_str());
+HAMqtt haMqtt(client, device);
+HACover haCover(service_name.c_str()); // unique ID of the cover. You should define your own ID.
 
 void setup_ota()
 {
 
   // Set OTA Password, and change it in platformio.ini
-  ArduinoOTA.setPassword("ESP8266_PASSWORD");
+  ArduinoOTA.setPassword("12345678");
+  ArduinoOTA.setHostname(service_name.c_str());
   ArduinoOTA.onStart([]() {});
   ArduinoOTA.onEnd([]() {});
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {});
@@ -135,51 +141,69 @@ void stopMoving()
   saveStatus();
 }
 
-void btnUpPressed()
-{
-  while (digitalRead(btnUp) == LOW)
-  {
-    delay(0);
-  }
-  if (stepper.getStepsLeft() != 0)
-  {
-    stopMoving();
-    return;
+void handleButtons(){
+  if (digitalRead(btnDown) == LOW){
+    if (stepper.getStepsLeft() != 0)
+    {
+      stopMoving();
+      return;
+    }
+    setPosition(0);
+    }
+
+  if (digitalRead(btnUp) == LOW){
+    if (stepper.getStepsLeft() != 0)
+    {
+      stopMoving();
+      return;
+    }
+    setPosition(100);
   }
 
-  setPosition(100);
+  while (!digitalRead(btnDown) || !digitalRead(btnUp))
+  {
+    delay(10);
+  }
+  
+}
+
+void updateHomeKitTargetPosition(unsigned int targetPosition){
   String value;
   String message;
   char data[100];
-  message = "{\"name\" : \"" + device_name + "\", \"service_name\" : \"" + service_name + "\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(100) + "}";
+  message = "{\"name\" : \"" + device_name + "\", \"service_name\" : \"" + service_name + "\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(targetPosition) + "}";
   message.toCharArray(data, (message.length() + 1));
   client.publish(mqtt_device_value_to_set_topic, data);
 }
 
-void btnDownPressed()
-{
-  while (digitalRead(btnDown) == LOW)
-  {
-    delay(0);
-    
-  }
-  if (stepper.getStepsLeft() != 0)
-  {
-    stopMoving();
-    return;
-  }
+void onHACoverCommand(HACover::CoverCommand cmd) {
 
-  setPosition(0);
-  String value;
-  String message;
-  char data[100];
-  message = "{\"name\" : \"" + device_name + "\", \"service_name\" : \"" + service_name + "\", \"characteristic\" : \"TargetPosition\", \"value\" : " + String(0) + "}";
-  message.toCharArray(data, (message.length() + 1));
-  client.publish(mqtt_device_value_to_set_topic, data);
+ 
+    Serial.println("received command from HA");
+    if (cmd == HACover::CommandOpen) {
+        Serial.println("Command: Open");
+        haCover.setState(HACover::StateOpening);
+        
+        setPosition(75);
+    } else if (cmd == HACover::CommandClose) {
+        Serial.println("Command: Close");
+        haCover.setState(HACover::StateClosing);
+        setPosition(0);
+    } else if (cmd == HACover::CommandStop) {
+        Serial.println("Command: Stop");
+        haCover.setState(HACover::StateStopped);
+        setPosition(currentPositionPercent);
+    }
+
 }
 
 void callback(char *topic, byte *payload, unsigned int length)
 {
+  //HA Lib topic
+  if (strcmp(topic,mqtt_device_value_from_set_topic) != 0){
+      haMqtt.processMessage(topic,payload,length);
+      return;
+  }
 
   char c_payload[length];
   memcpy(c_payload, payload, length);
@@ -202,7 +226,7 @@ void callback(char *topic, byte *payload, unsigned int length)
     return;
   }
 
-  blink();
+  // blink();
   const char *characteristic = root["characteristic"];
 
   if (strcmp(characteristic, "TargetPosition") == 0)
@@ -222,10 +246,13 @@ void updateServerValue()
   message = "{\"name\" : \"" + device_name + "\", \"service_name\" : \"" + service_name + "\", \"characteristic\" : \"CurrentPosition\", \"value\" : " + String(currentPositionPercent) + "}";
   message.toCharArray(data, (message.length() + 1));
   client.publish(mqtt_device_value_to_set_topic, data);
+  haCover.setPosition(currentPositionPercent);
 }
 
 void setPosition(unsigned int positionPercent)
 {
+  updateHomeKitTargetPosition(positionPercent);
+
   if (isInvert)
   {
     positionPercent = 100 - positionPercent;
@@ -241,6 +268,7 @@ void setPosition(unsigned int positionPercent)
     else
       targetPositionStep = 0;
   }
+
 
   Serial.print("targetPositionStep = ");
   Serial.println(targetPositionStep);
@@ -335,17 +363,35 @@ void callibrateMode()
 
 void setup()
 {
-  // WiFi.disconnect();
-  // Serial.begin(9600);
+  ESP.wdtEnable(10000);
+  delay(500);      //Stabilise voltage
+
+  pinMode(stepper_1, OUTPUT);
+  pinMode(stepper_2, OUTPUT);
+  pinMode(stepper_3, OUTPUT);
+  pinMode(stepper_4, OUTPUT);
+
+  digitalWrite(stepper_1, 0);
+  digitalWrite(stepper_2, 0);
+  digitalWrite(stepper_3, 0);
+  digitalWrite(stepper_4, 0);
+
+
+  Serial.begin(9600);
+  Serial.println("Start");
   stepper = CheapStepper(stepper_1, stepper_2, stepper_3, stepper_4);
   stepper.begin();
   stepper.setRpm(upRPM);
+
+  Serial.println("Stepper init OK");
 
   // Setup buttons
   pinMode(btnUp, INPUT_PULLUP);
   pinMode(btnDown, INPUT_PULLUP);
 
   EEPROM.begin(512);
+  Serial.println("EEPROM init OK");
+
 
   delay(5000);
 
@@ -372,6 +418,8 @@ void setup()
     EEPROM.commit();
     delay(300);
   }
+  Serial.println("LOAD Data init OK");
+
 
   // Setup networking
   WiFiManager wifiManager;
@@ -387,17 +435,21 @@ void setup()
     ESP.reset(); //Restart if it can't connect.
   }
 
-  // setup_ota();
+  setup_ota();
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
 
-  //Attach interrupt for manual button controls
-  attachInterrupt(digitalPinToInterrupt(btnUp), btnUpPressed, FALLING);
-  attachInterrupt(digitalPinToInterrupt(btnDown), btnDownPressed, FALLING);
 
-  //Turn off led
-  pinMode(onboard_led, OUTPUT);
-  digitalWrite(onboard_led, HIGH);
+  //init HA
+  device.setName(device_name.c_str());
+  device.setManufacturer("Magi");
+  device.setModel("IKEA TUPPLUR Blind");
+  haCover.onCommand(onHACoverCommand);
+  if (client.connected()){
+      haMqtt.onConnectedLogic();
+  }
+
+
 }
 
 void saveStatus()
@@ -425,6 +477,7 @@ void saveStatus()
     // EEPROM.end();
     delay(500);
     lastSavedValue = currentPositionStep;
+    haCover.setState(HACover::StateStopped);
   }
 }
 
@@ -434,6 +487,9 @@ void loop()
   if (!client.connected())
   {
     reconnect();
+    if (client.connected()){
+      haMqtt.onConnectedLogic();
+    }
   }
   client.loop();
   ArduinoOTA.handle();
@@ -443,9 +499,9 @@ void loop()
   if (stepper.getStepsLeft() != 0)
   {
     if (moveClockwise)
-      currentPositionStep = abs(targetPositionStep + abs(stepper.getStepsLeft()));
+      currentPositionStep = targetPositionStep + abs(stepper.getStepsLeft());
     else
-      currentPositionStep = abs(targetPositionStep - abs(stepper.getStepsLeft()));
+      currentPositionStep = targetPositionStep - abs(stepper.getStepsLeft());
   }
 
   currentPositionPercent = (int)round(((float)currentPositionStep / (float)maxPositionStep) * 100.0);
@@ -453,4 +509,7 @@ void loop()
     currentPositionPercent = 100 - currentPositionPercent;
 
   saveStatus();
+  ESP.wdtFeed();
+
+  handleButtons();
 }
