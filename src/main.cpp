@@ -143,6 +143,19 @@ void stopMoving()
 
 void handleButtons(){
   if (digitalRead(btnDown) == LOW){
+    // Detect a long press (5s) to enter calibrate mode
+    unsigned long pressStart = millis();
+    while (digitalRead(btnDown) == LOW)
+    {
+      if (millis() - pressStart >= 5000)
+      {
+        callibrateMode();
+        return;
+      }
+      ESP.wdtFeed();
+      delay(10);
+    }
+
     if (stepper.getStepsLeft() != 0)
     {
       stopMoving();
@@ -306,51 +319,56 @@ void setPosition(unsigned int positionPercent)
   stepper.newMove(moveClockwise, stepsToGo);
 }
 
+// Blocks until btnDown has held the desired state (LOW when wantPressed, HIGH
+// otherwise) continuously for the debounce window, so contact bounce on either
+// edge can't bleed a single button action into the next calibrate phase.
+// Keeps the stepper and watchdog serviced while waiting.
+void waitForButton(bool wantPressed, bool runStepper)
+{
+  const unsigned long debounceMs = 50;
+  unsigned long stableStart = millis();
+  while (true)
+  {
+    bool pressed = (digitalRead(btnDown) == LOW);
+    if (pressed != wantPressed)
+      stableStart = millis(); // not the wanted state yet, restart the timer
+    else if (millis() - stableStart >= debounceMs)
+      return; // held the wanted state long enough -> debounced
+
+    if (runStepper)
+      stepper.run();
+    ESP.wdtFeed();
+    yield();
+  }
+}
+
 void callibrateMode()
 {
   Serial.println("Calibrate mode");
   int distanceStep = 0;
 
-  //Wait until button release
-  while (digitalRead(btnDown) == LOW)
-  {
-    delay(0);
-  }
-  delay(50);
-
   if (isInvert)
     stepper.newMove(false, 1000000);
   else
     stepper.newMove(true, 1000000);
 
-  //Do until button pressed - Move to lowest position
-  while (digitalRead(btnDown) != LOW)
-  {
-    stepper.run();
-    delay(0);
-  }
+  // Wait until the calibrate-entry press is released (keep descending)
+  waitForButton(false, true);
+
+  // Move to lowest position until the button is pressed
+  waitForButton(true, true);
   stepper.stop();
   Serial.println("Lowest point");
 
-  while (digitalRead(btnDown) == LOW)
-  {
-    delay(5);
-  }
+  // Wait for that press to be released before listening for the next one
+  waitForButton(false, false);
 
   if (isInvert)
     stepper.newMove(true, 1000000);
   else
     stepper.newMove(false, 1000000);
-  // Do until button pressed - Move to highest position + record distance
-  while (digitalRead(btnDown) != LOW)
-  {
-    stepper.run();
-    delay(0);
-  }
-  while (digitalRead(btnDown) == LOW)
-  {
-    delay(0);
-  }
+  // Move to highest position until the button is pressed, then record distance
+  waitForButton(true, true);
   distanceStep = 1000000 - abs(stepper.getStepsLeft());
   stepper.stop();
   Serial.print("Calibrated distance: ");
@@ -493,7 +511,17 @@ void loop()
   }
   client.loop();
   ArduinoOTA.handle();
-  stepper.run();
+
+  // Drive the stepper in a short tight burst so the rest of loop() (MQTT,
+  // OTA, saveStatus, buttons) doesn't starve it between steps and make the
+  // motor lag. When idle this runs run() once and exits immediately.
+  unsigned long burstStart = millis();
+  do
+  {
+    stepper.run();
+    ESP.wdtFeed();
+    yield();
+  } while (stepper.getStepsLeft() != 0 && (millis() - burstStart) < 25);
 
   //update value
   if (stepper.getStepsLeft() != 0)
